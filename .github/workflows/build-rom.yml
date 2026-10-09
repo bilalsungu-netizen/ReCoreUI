@@ -59,6 +59,33 @@ jobs:
           sudo bash build.sh --build ${{ inputs.device }}
 
 
+      - name: Verify Lite ROM ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t roms < <(find out -type f -name '*.zip' -print0)
+
+          if (( ${#roms[@]} == 0 )); then
+            echo "::error::ROM ZIP not found"
+            exit 1
+          fi
+
+          for rom in "${roms[@]}"; do
+            unzip -tq "$rom"
+            sha256sum "$rom" > "${rom}.sha256"
+          done
+
+      - name: Upload Lite ROM ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReCoreUI-Lite-m14x
+          path: |
+            out/**/*.zip
+            out/**/*.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
       - name: Upload ROM to Gofile
         if: inputs.upload_cloud == true
         run: |
