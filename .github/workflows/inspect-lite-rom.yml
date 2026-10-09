@@ -1,0 +1,107 @@
+name: Inspect ReCoreUI Lite ROM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df -h .
+
+      - name: Download ROM on GitHub runner
+        uses: actions/download-artifact@v4
+        with:
+          name: ReCoreUI-Lite-m14x-30days
+          run-id: 37940614045
+          repository: bilalsungu-netizen/ReCoreUI
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: rom_files
+
+      - name: Check ZIP and partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ROM=$(find rom_files -name '*.zip' -type f -print -quit)
+          test -n "$ROM"
+
+          echo "=== ROM FILE ==="
+          ls -lh "$ROM"
+
+          echo "=== SHA256 ==="
+          test -f "${ROM}.sha256"
+          expected=$(awk 'NR==1 {print $1}' "${ROM}.sha256")
+          actual=$(sha256sum "$ROM" | awk '{print $1}')
+          test "$expected" = "$actual"
+          echo "SHA256 OK"
+
+          echo "=== ZIP INTEGRITY ==="
+          unzip -tq "$ROM"
+          echo "ZIP OK"
+
+          echo "=== ZIP CONTENTS ==="
+          unzip -Z1 "$ROM" | sed -n '1,100p'
+
+          echo "=== PARTITION FILES ==="
+          unzip -Z1 "$ROM" |
+            grep -Ei '\.img$|\.new\.dat|\.transfer\.list' || true
+
+          echo "=== APP SCAN ==="
+
+          mapfile -t images < <(
+            unzip -Z1 "$ROM" |
+            grep -E '(^|/)(system|product|system_ext)\.img$' || true
+          )
+
+          if (( ${#images[@]} == 0 )); then
+            echo "NO_DIRECT_IMAGES: Farkli paket yapisi."
+            echo "Uygulama taramasi tamamlanamadi."
+          fi
+
+          for entry in "${images[@]}"; do
+            echo "=== INSPECTING: $entry ==="
+
+            img=$(mktemp /tmp/rom-partition.XXXXXX.img)
+            mnt=$(mktemp -d)
+
+            unzip -p "$ROM" "$entry" > "$img"
+
+            file "$img"
+
+            if sudo mount -t erofs -o loop,ro "$img" "$mnt" 2>/dev/null ||
+               sudo mount -t ext4 -o loop,ro "$img" "$mnt" 2>/dev/null; then
+
+              echo "MOUNT OK"
+
+              sudo find "$mnt" -type d \
+                \( -iname '*Bixby*' \
+                -o -iname '*Interpreter*' \
+                -o -iname '*DeX*' \
+                -o -iname '*Desktop*' \
+                -o -iname '*VisionIntelligence*' \
+                -o -iname '*PhotoRemaster*' \
+                -o -iname 'SamsungMembers' \
+                -o -iname 'SamsungGlobalGoals' \
+                -o -iname 'SamsungTVPlus' \) \
+                -print | head -n 120 || true
+
+              sudo umount "$mnt"
+            else
+              echo "MOUNT FAILED: Bu bolum incelenemedi."
+            fi
+
+            rm -f "$img"
+            rmdir "$mnt"
+          done
+
+          echo "=== INSPECTION FINISHED ==="
