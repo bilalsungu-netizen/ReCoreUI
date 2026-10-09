@@ -88,3 +88,5 @@ jobs:
           echo "Upload Successful!"
           echo "Download Link: $DOWNLOAD_LINK"
           echo "=============================="
+
+# Fork Actions registration; no build behavior change.
