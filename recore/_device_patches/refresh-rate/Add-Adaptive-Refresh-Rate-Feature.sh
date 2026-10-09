@@ -43,7 +43,9 @@ if GET_FEATURE DEVICE_HAVE_HIGH_REFRESH_RATE && [[ "$FRAMERATE_OVERRIDE" != "tru
     BPROP "vendor" "ro.surface_flinger.enable_frame_rate_override" "true"
 
 # If device have custom hfr support , use it
-if (( DEVICE_DISPLAY_HFR_MODE < 2 )); then
+HFR_VALUE="${DEVICE_DISPLAY_HFR_MODE:-2}"
+
+if (( HFR_VALUE < 2 )); then
     HFR_VALUE=2
 fi
         FF "LCD_CONFIG_HFR_MODE" "$HFR_VALUE"
