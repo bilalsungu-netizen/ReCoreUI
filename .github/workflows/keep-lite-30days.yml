@@ -1,0 +1,61 @@
+name: Preserve ReCoreUI Lite 30 Days
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Prepare disk space
+        run: |
+          df -h .
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df -h .
+
+      - name: Download original ROM
+        uses: actions/download-artifact@v4
+        with:
+          name: ReCoreUI-Lite-m14x
+          run-id: 37928896686
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: bilalsungu-netizen/ReCoreUI
+          path: rom_files
+
+      - name: Verify ROM checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t roms < <(
+            find rom_files -type f -name '*.zip' -print0
+          )
+
+          if (( ${#roms[@]} == 0 )); then
+            echo "ROM ZIP bulunamadi"
+            exit 1
+          fi
+
+          for rom in "${roms[@]}"; do
+            test -f "${rom}.sha256"
+            expected=$(awk 'NR==1 {print $1}' "${rom}.sha256")
+            actual=$(sha256sum "$rom" | awk '{print $1}')
+            test "$expected" = "$actual"
+            echo "SHA256 OK: $rom"
+          done
+
+          du -sh rom_files
+
+      - name: Upload ROM for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReCoreUI-Lite-m14x-30days
+          path: rom_files/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
